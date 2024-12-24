@@ -34,8 +34,17 @@ contract CenticVault is ICenticVault, ReentrancyGuardUpgradeable {
         _;
     }
 
-    function initialize() public initializer {
+    function initialize(
+        address _sponsor,
+        address _tokenPayout,
+        uint256 _totalPayout,
+        address _manager
+    ) public initializer {
         __ReentrancyGuard_init();
+        sponsor = _sponsor;
+        tokenPayout = _tokenPayout;
+        totalPayout = _totalPayout;
+        manager = _manager;
     }
 
     function deposit() public payable {
@@ -135,4 +144,3 @@ contract CenticVault is ICenticVault, ReentrancyGuardUpgradeable {
         emit AddMember(_member);
     }
 }
-2

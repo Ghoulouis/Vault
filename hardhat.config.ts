@@ -56,20 +56,7 @@ const config: HardhatUserConfig = {
             accounts: TEST_HDWALLET,
             tags: ["hardhat"],
             deploy: ["deploy/hardhat"],
-        },
-        eth_tenderly: {
-            url: process.env.RPC_ETH_TENDERLY!,
-            chainId: 1,
-            accounts: accounts,
-            tags: ["staging"],
-        },
-        sapphire_testnet: {
-            url: "https://testnet.sapphire.oasis.dev",
-            chainId: 0x5aff,
-            accounts,
-            live: true,
-            deploy: ["deploy/sapphire_testnet"],
-            tags: ["sapphire_testnet"],
+            saveDeployments: true,
         },
     },
 };
