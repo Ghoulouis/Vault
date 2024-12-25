@@ -9,7 +9,9 @@ interface IAutoPayoutVault {
     }
 
     enum ParticapantStatus {
+        NOT_EXIST,
         ACCEPTED,
+        CLAIMED,
         REJECTED
     }
 
@@ -29,4 +31,33 @@ interface IAutoPayoutVault {
         uint256 particapantCounter;
         OfferStatus status;
     }
+
+    event OfferOpened(
+        bytes32 indexed id,
+        address indexed addr,
+        address indexed tokenPayout,
+        uint256 totalPayout,
+        uint256 minPayout
+    );
+
+    event OfferUpgraded(bytes32 indexed id, uint256 extraPayout);
+
+    event OfferAccepted(
+        bytes32 indexed id,
+        uint256 indexed particapantIndex,
+        address indexed addr
+    );
+
+    event RewardUpdated(
+        bytes32 indexed id,
+        uint256 indexed particapantIndex,
+        uint256 reward
+    );
+
+    event RewardClaimed(
+        bytes32 indexed id,
+        uint256 indexed particapantIndex,
+        address indexed addr,
+        uint256 reward
+    );
 }
