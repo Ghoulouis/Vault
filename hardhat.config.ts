@@ -9,56 +9,66 @@ import "@typechain/hardhat";
 dotenv.config();
 
 const TEST_HDWALLET = {
-    mnemonic: "test test test test test test test test test test test junk",
-    path: "m/44'/60'/0'/0",
-    initialIndex: 0,
-    count: 20,
-    passphrase: "",
+  mnemonic: "test test test test test test test test test test test junk",
+  path: "m/44'/60'/0'/0",
+  initialIndex: 0,
+  count: 20,
+  passphrase: "",
 };
-const accounts = process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : TEST_HDWALLET;
+const accounts = process.env.PRIVATE_KEY
+  ? [process.env.PRIVATE_KEY]
+  : TEST_HDWALLET;
 
 const config: HardhatUserConfig = {
-    paths: {
-        artifacts: "artifacts",
-        cache: "cache",
-        deploy: "deploy",
-        sources: "contracts",
-        tests: "test",
-    },
-    solidity: {
-        compilers: [
-            {
-                version: "0.8.24",
-                settings: {
-                    optimizer: {
-                        enabled: true,
-                        runs: 200,
-                        details: {
-                            yul: false,
-                        },
-                    },
-                    viaIR: true,
-                    metadata: {
-                        bytecodeHash: "none",
-                    },
-                },
+  paths: {
+    artifacts: "artifacts",
+    cache: "cache",
+    deploy: "deploy",
+    sources: "contracts",
+    tests: "test",
+  },
+  solidity: {
+    compilers: [
+      {
+        version: "0.8.24",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+            details: {
+              yul: false,
             },
-        ],
-    },
-    namedAccounts: {
-        deployer: 0,
-        alice: 1,
-        bob: 2,
-    },
-    networks: {
-        hardhat: {
-            chainId: 31337,
-            accounts: TEST_HDWALLET,
-            tags: ["hardhat"],
-            deploy: ["deploy/hardhat"],
-            saveDeployments: true,
+          },
+          viaIR: true,
+          metadata: {
+            bytecodeHash: "none",
+          },
         },
+      },
+    ],
+  },
+  namedAccounts: {
+    deployer: 0,
+    alice: 1,
+    bob: 2,
+  },
+  networks: {
+    hardhat: {
+      chainId: 31337,
+      accounts: TEST_HDWALLET,
+      tags: ["hardhat"],
+      deploy: ["deploy/hardhat"],
+      saveDeployments: true,
     },
+    bsc_testnet: {
+      chainId: 97,
+      url: process.env.RPC_BSC_TESTNET!,
+      accounts: accounts,
+      tags: ["bsc_testnet"],
+      deploy: ["deploy/bsc_testnet"],
+      saveDeployments: true,
+    },
+  },
 };
 
 export default config;
