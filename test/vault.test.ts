@@ -59,7 +59,6 @@ describe("Vault test", () => {
   describe("open Offer", () => {
     let idOffer = hexlify(ethers.randomBytes(32));
     let amount = parseUnits("100", 6);
-    let minAmount = parseUnits("60", 6);
     beforeEach(async () => {
       await usdt.connect(alice).approve(await vault.getAddress(), amount);
       await vault
@@ -174,6 +173,63 @@ describe("Vault test", () => {
 
         await expect(vault.connect(bob).claimReward(data, signature + "00")).to
           .be.reverted;
+      });
+    });
+
+    describe("close offer", () => {
+      let idOffer = hexlify(ethers.randomBytes(32));
+
+      it("close offer native token", async () => {
+        let amount = parseUnits("100", 18);
+        await vault.connect(alice).openOffer(idOffer, ZeroAddress, amount, {
+          value: amount,
+        });
+
+        const verifier = new Wallet(process.env.VERIFIER_KEY!);
+        const receiver = bob.address;
+        const reward = parseUnits("10", 6);
+        const data = AbiCoder.defaultAbiCoder().encode(
+          ["bytes32", "address", "uint256"],
+          [idOffer, receiver, reward]
+        );
+        const dataHash = ethers.keccak256(data);
+        const signature = await verifier.signMessage(getBytes(dataHash));
+        await expect(vault.connect(bob).claimReward(data, signature)).to.emit(
+          vault,
+          "RewardClaimed"
+        );
+
+        await expect(vault.connect(alice).closeOffer(idOffer)).to.emit(
+          vault,
+          "OfferClosed"
+        );
+      });
+
+      it("close offer ERC-20 token", async () => {
+        let amount = parseUnits("100", 6);
+        await usdt.connect(alice).approve(await vault.getAddress(), amount);
+        await vault
+          .connect(alice)
+          .openOffer(idOffer, await usdt.getAddress(), amount);
+
+        const verifier = new Wallet(process.env.VERIFIER_KEY!);
+        const receiver = bob.address;
+        const reward = parseUnits("10", 6);
+        const data = AbiCoder.defaultAbiCoder().encode(
+          ["bytes32", "address", "uint256"],
+          [idOffer, receiver, reward]
+        );
+        const dataHash = ethers.keccak256(data);
+        const signature = await verifier.signMessage(getBytes(dataHash));
+        await expect(vault.connect(bob).claimReward(data, signature)).to.emit(
+          vault,
+          "RewardClaimed"
+        );
+
+        await expect(vault.connect(alice).closeOffer(idOffer)).to.emit(
+          vault,
+          "OfferClosed"
+        );
       });
     });
   });

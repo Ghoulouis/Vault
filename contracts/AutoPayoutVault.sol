@@ -90,6 +90,8 @@ contract AutoPayoutVault is
         require(offer.addr == msg.sender, "AP10: not owner");
         offer.status = OfferStatus.CLOSED;
         _tranferOut(offer.token, msg.sender, offer.balance);
+        offer.balance = 0;
+        emit OfferClosed(_id, offer.balance);
     }
 
     function _tranferIn(address token, uint256 amount) internal {

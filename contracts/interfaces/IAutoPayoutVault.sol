@@ -42,4 +42,6 @@ interface IAutoPayoutVault {
         address indexed addr,
         uint256 reward
     );
+
+    event OfferClosed(bytes32 indexed id, uint256 balance);
 }
