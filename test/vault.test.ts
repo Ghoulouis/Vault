@@ -9,6 +9,7 @@ import {
   getBytes,
   hexlify,
   id,
+  keccak256,
   parseUnits,
   Wallet,
   ZeroAddress,
@@ -119,9 +120,10 @@ describe("Vault test", () => {
         const verifier = new Wallet(process.env.VERIFIER_KEY!);
         const receiver = bob.address;
         const reward = parseUnits("10", 6);
+        const unidata = keccak256("0x1234");
         const data = AbiCoder.defaultAbiCoder().encode(
-          ["bytes32", "address", "uint256"],
-          [idOffer, receiver, reward]
+          ["bytes32", "address", "uint256", "bytes32"],
+          [idOffer, receiver, reward, unidata]
         );
         const dataHash = ethers.keccak256(data);
         const signature = await verifier.signMessage(getBytes(dataHash));
@@ -141,9 +143,10 @@ describe("Vault test", () => {
         const verifier = new Wallet(process.env.VERIFIER_KEY!);
         const receiver = bob.address;
         const reward = parseUnits("10", 6);
+        const unidata = keccak256("0x1234");
         const data = AbiCoder.defaultAbiCoder().encode(
-          ["bytes32", "address", "uint256"],
-          [idOffer, receiver, reward]
+          ["bytes32", "address", "uint256", "bytes32"],
+          [idOffer, receiver, reward, unidata]
         );
         const dataHash = ethers.keccak256(data);
         const signature = await verifier.signMessage(getBytes(dataHash));
@@ -164,14 +167,45 @@ describe("Vault test", () => {
         const verifier = new Wallet(process.env.VERIFIER_KEY!);
         const receiver = bob.address;
         const reward = parseUnits("10", 6);
+
+        const unidata = keccak256("0x1234");
         const data = AbiCoder.defaultAbiCoder().encode(
-          ["bytes32", "address", "uint256"],
-          [idOffer, receiver, reward]
+          ["bytes32", "address", "uint256", "bytes32"],
+          [idOffer, receiver, reward, unidata]
         );
         const dataHash = ethers.keccak256(data);
         const signature = await verifier.signMessage(getBytes(dataHash));
 
         await expect(vault.connect(bob).claimReward(data, signature + "00")).to
+          .be.reverted;
+      });
+
+      it("should revert if claim reward with duplicate unidata", async () => {
+        let amount = parseUnits("100", 6);
+        await usdt.connect(alice).approve(await vault.getAddress(), amount);
+        await vault
+          .connect(alice)
+          .openOffer(idOffer, await usdt.getAddress(), amount);
+
+        const verifier = new Wallet(process.env.VERIFIER_KEY!);
+        const receiver = bob.address;
+        const reward = parseUnits("10", 6);
+        const unidata = keccak256("0x1234");
+        const data = AbiCoder.defaultAbiCoder().encode(
+          ["bytes32", "address", "uint256", "bytes32"],
+          [idOffer, receiver, reward, unidata]
+        );
+        const dataHash = ethers.keccak256(data);
+        const signature = await verifier.signMessage(getBytes(dataHash));
+        await vault.connect(bob).claimReward(data, signature);
+
+        const data2 = AbiCoder.defaultAbiCoder().encode(
+          ["bytes32", "address", "uint256", "bytes32"],
+          [idOffer, charlie.address, reward, unidata]
+        );
+        const dataHash2 = ethers.keccak256(data2);
+        const signature2 = await verifier.signMessage(getBytes(dataHash2));
+        await expect(vault.connect(charlie).claimReward(data2, signature2)).to
           .be.reverted;
       });
     });
@@ -188,9 +222,11 @@ describe("Vault test", () => {
         const verifier = new Wallet(process.env.VERIFIER_KEY!);
         const receiver = bob.address;
         const reward = parseUnits("10", 6);
+
+        const unidata = keccak256("0x1234");
         const data = AbiCoder.defaultAbiCoder().encode(
-          ["bytes32", "address", "uint256"],
-          [idOffer, receiver, reward]
+          ["bytes32", "address", "uint256", "bytes32"],
+          [idOffer, receiver, reward, unidata]
         );
         const dataHash = ethers.keccak256(data);
         const signature = await verifier.signMessage(getBytes(dataHash));
@@ -215,9 +251,10 @@ describe("Vault test", () => {
         const verifier = new Wallet(process.env.VERIFIER_KEY!);
         const receiver = bob.address;
         const reward = parseUnits("10", 6);
+        const unidata = keccak256("0x1234");
         const data = AbiCoder.defaultAbiCoder().encode(
-          ["bytes32", "address", "uint256"],
-          [idOffer, receiver, reward]
+          ["bytes32", "address", "uint256", "bytes32"],
+          [idOffer, receiver, reward, unidata]
         );
         const dataHash = ethers.keccak256(data);
         const signature = await verifier.signMessage(getBytes(dataHash));

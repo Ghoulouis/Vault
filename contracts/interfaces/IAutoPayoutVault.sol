@@ -25,12 +25,6 @@ interface IAutoPayoutVault {
 
     event OfferUpgraded(bytes32 indexed id, uint256 amount);
 
-    event OfferAccepted(
-        bytes32 indexed id,
-        uint256 indexed particapantIndex,
-        address indexed addr
-    );
-
     event RewardUpdated(
         bytes32 indexed id,
         uint256 indexed particapantIndex,
@@ -40,7 +34,8 @@ interface IAutoPayoutVault {
     event RewardClaimed(
         bytes32 indexed id,
         address indexed addr,
-        uint256 reward
+        uint256 reward,
+        bytes32 uniqueData
     );
 
     event OfferClosed(bytes32 indexed id, uint256 balance);

@@ -54,18 +54,16 @@ contract AutoPayoutVault is
         bytes calldata data,
         bytes calldata signature
     ) public nonReentrant {
-        (bytes32 id, address addr, uint256 amount) = abi.decode(
-            data,
-            (bytes32, address, uint256)
-        );
+        (bytes32 id, address addr, uint256 amount, bytes32 uniqueData) = abi
+            .decode(data, (bytes32, address, uint256, bytes32));
         require(
             verifyEthMessage(verifier, data, signature),
             "AP08: invalid signature"
         );
         require(msg.sender == addr, "AP06: not owner reward");
-        bytes32 signatureHash = keccak256(signature);
-        require(!signatureUsed[signatureHash], "AP09: signature already used");
-        signatureUsed[keccak256(signature)] = true;
+
+        require(!signatureUsed[uniqueData], "AP09: signature already used");
+        signatureUsed[uniqueData] = true;
 
         Offer storage offer = offers[id];
         require(offer.status == OfferStatus.OPEN, "AP03: offer is not open");
@@ -73,7 +71,7 @@ contract AutoPayoutVault is
         offer.balance -= amount;
         _tranferOut(offer.token, addr, amount);
 
-        emit RewardClaimed(id, addr, amount);
+        emit RewardClaimed(id, addr, amount, uniqueData);
     }
 
     function upgradeOffer(bytes32 _id, uint256 _extraPayout) public {
