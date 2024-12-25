@@ -8,39 +8,22 @@ interface IAutoPayoutVault {
         CLOSED
     }
 
-    enum ParticapantStatus {
-        NOT_EXIST,
-        ACCEPTED,
-        CLAIMED,
-        REJECTED
-    }
-
-    struct Particapant {
-        address addr;
-        uint256 reward;
-        ParticapantStatus status;
-    }
-
     struct Offer {
         bytes32 id;
         address addr;
-        address tokenPayout;
-        uint256 totalPayout;
-        uint256 minPayout;
+        address token;
         uint256 balance;
-        uint256 particapantCounter;
         OfferStatus status;
     }
 
     event OfferOpened(
         bytes32 indexed id,
         address indexed addr,
-        address indexed tokenPayout,
-        uint256 totalPayout,
-        uint256 minPayout
+        address indexed token,
+        uint256 amount
     );
 
-    event OfferUpgraded(bytes32 indexed id, uint256 extraPayout);
+    event OfferUpgraded(bytes32 indexed id, uint256 amount);
 
     event OfferAccepted(
         bytes32 indexed id,
@@ -56,7 +39,6 @@ interface IAutoPayoutVault {
 
     event RewardClaimed(
         bytes32 indexed id,
-        uint256 indexed particapantIndex,
         address indexed addr,
         uint256 reward
     );

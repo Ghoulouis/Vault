@@ -5,8 +5,9 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-
 import "./interfaces/IAutoPayoutVault.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 contract AutoPayoutVault is
     IAutoPayoutVault,
@@ -17,116 +18,78 @@ contract AutoPayoutVault is
 
     bytes32 public immutable MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
-    mapping(bytes32 => Offer) public offers;
-    mapping(bytes32 => mapping(uint256 => Particapant)) public particapants;
+    address public verifier;
 
-    function initialize() public initializer {
+    mapping(bytes32 => Offer) public offers;
+    mapping(bytes32 => bool) public signatureUsed;
+
+    function initialize(address _verifier) public initializer {
         __ReentrancyGuard_init();
         __AccessControl_init();
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MANAGER_ROLE, msg.sender);
+        verifier = _verifier;
     }
 
     function openOffer(
         bytes32 _id,
-        address _tokenPayout,
-        uint256 _totalPayout,
-        uint256 _minPayout
-    ) public {
+        address _token,
+        uint256 _amount
+    ) public payable {
         Offer storage offer = offers[_id];
         require(
             offer.status == OfferStatus.NOT_EXIST,
             "AP01: offer already exists"
         );
-        _tranferIn(_tokenPayout, _totalPayout);
+        _tranferIn(_token, _amount);
         offer.id = _id;
         offer.addr = msg.sender;
-        offer.tokenPayout = _tokenPayout;
-        offer.totalPayout = _totalPayout;
-        offer.minPayout = _minPayout;
-        offer.balance = _totalPayout;
-        offer.particapantCounter = 0;
+        offer.token = _token;
+        offer.balance = _amount;
         offer.status = OfferStatus.OPEN;
+        emit OfferOpened(_id, msg.sender, _token, _amount);
+    }
 
-        emit OfferOpened(
-            _id,
-            msg.sender,
-            _tokenPayout,
-            _totalPayout,
-            _minPayout
+    function claimReward(
+        bytes calldata data,
+        bytes calldata signature
+    ) public nonReentrant {
+        (bytes32 id, address addr, uint256 amount) = abi.decode(
+            data,
+            (bytes32, address, uint256)
         );
+        require(
+            verifyEthMessage(verifier, data, signature),
+            "AP08: invalid signature"
+        );
+        require(msg.sender == addr, "AP06: not owner reward");
+        bytes32 signatureHash = keccak256(signature);
+        require(!signatureUsed[signatureHash], "AP09: signature already used");
+        signatureUsed[keccak256(signature)] = true;
+
+        Offer storage offer = offers[id];
+        require(offer.status == OfferStatus.OPEN, "AP03: offer is not open");
+
+        offer.balance -= amount;
+        _tranferOut(offer.token, addr, amount);
+
+        emit RewardClaimed(id, addr, amount);
     }
 
     function upgradeOffer(bytes32 _id, uint256 _extraPayout) public {
         Offer storage offer = offers[_id];
         require(offer.status == OfferStatus.OPEN, "AP03: offer is not open");
-        _tranferIn(offer.tokenPayout, _extraPayout);
-        offer.totalPayout += _extraPayout;
+        _tranferIn(offer.token, _extraPayout);
         offer.balance += _extraPayout;
-
         emit OfferUpgraded(_id, _extraPayout);
     }
 
-    function acceptOffer(bytes32 _id) public {
-        Offer storage offer = offers[_id];
-        require(offer.status == OfferStatus.OPEN, "AP03: offer is not open");
-        for (uint256 i = 0; i < offer.particapantCounter; i++) {
-            require(
-                particapants[_id][i].addr != msg.sender,
-                "AP04: already accepted"
-            );
-        }
-        require(
-            offer.totalPayout >=
-                offer.minPayout * (offer.particapantCounter + 1),
-            "AP05: full particapants"
-        );
-        particapants[_id][offer.particapantCounter] = Particapant({
-            addr: msg.sender,
-            reward: 0,
-            status: ParticapantStatus.ACCEPTED
-        });
-        offer.particapantCounter++;
-
-        emit OfferAccepted(_id, offer.particapantCounter - 1, msg.sender);
-    }
-
-    function AddRewardParticapants(
-        bytes32[] calldata _id,
-        uint256[] calldata _index,
-        uint256[] calldata _reward
-    ) public {
-        require(hasRole(MANAGER_ROLE, msg.sender), "AP06: not manager");
-        for (uint256 i = 0; i < _id.length; i++) {
-            _addRewardParticapant(_id[i], _index[i], _reward[i]);
-        }
-    }
-
-    function claimReward(bytes32 _id) public {
-        Offer storage offer = offers[_id];
-        for (uint256 i = 0; i < offer.particapantCounter; i++) {
-            Particapant storage particapant = particapants[_id][i];
-            if (particapant.addr == msg.sender) {
-                require(
-                    particapant.status == ParticapantStatus.ACCEPTED,
-                    "AP11: not accepted status"
-                );
-                require(particapant.reward > 0, "AP12: reward is zero");
-                _tranferOut(offer.tokenPayout, msg.sender, particapant.reward);
-                particapant.status = ParticapantStatus.CLAIMED;
-
-                emit RewardClaimed(_id, i, msg.sender, particapant.reward);
-                return;
-            }
-        }
-    }
-
-    function closeOffer(bytes32 _id) public {
+    function closeOffer(bytes32 _id) public nonReentrant {
         Offer storage offer = offers[_id];
         require(offer.status == OfferStatus.OPEN, "AP07: offer is not open");
         require(offer.addr == msg.sender, "AP10: not owner");
-        _tranferOut(offer.tokenPayout, msg.sender, offer.balance);
         offer.status = OfferStatus.CLOSED;
+        _tranferOut(offer.token, msg.sender, offer.balance);
     }
 
     function _tranferIn(address token, uint256 amount) internal {
@@ -145,22 +108,27 @@ contract AutoPayoutVault is
         }
     }
 
-    function _addRewardParticapant(
-        bytes32 _id,
-        uint256 _index,
-        uint256 _reward
-    ) internal {
-        Offer storage offer = offers[_id];
-
-        require(offer.status == OfferStatus.OPEN, "AP07: offer is not open");
-        require(
-            particapants[_id][_index].status == ParticapantStatus.ACCEPTED,
-            "AP08: not accepted status"
+    function verifyEthMessage(
+        address signer,
+        bytes calldata data,
+        bytes calldata signature
+    ) public pure returns (bool) {
+        bytes32 messageHash = keccak256(data);
+        bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(
+            messageHash
         );
-        require(_reward <= offer.minPayout, "AP09: invalid reward");
-        offer.balance = offer.balance - _reward;
-        particapants[_id][_index].reward += _reward;
+        address recoveredSigner = ECDSA.recover(
+            ethSignedMessageHash,
+            signature
+        );
+        return recoveredSigner == signer;
+    }
 
-        emit RewardUpdated(_id, _index, _reward);
+    function changeVerifier(address _verifier) public {
+        require(
+            hasRole(MANAGER_ROLE, msg.sender),
+            "AP04: must have manager role"
+        );
+        verifier = _verifier;
     }
 }

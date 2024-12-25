@@ -4,12 +4,20 @@ import {
   SnapshotRestorer,
   takeSnapshot,
 } from "@nomicfoundation/hardhat-network-helpers";
-import { hexlify, parseUnits, ZeroAddress } from "ethers";
+import {
+  AbiCoder,
+  getBytes,
+  hexlify,
+  id,
+  parseUnits,
+  Wallet,
+  ZeroAddress,
+} from "ethers";
 import hre, { ethers } from "hardhat";
 import { AutoPayoutVault, USDT } from "../typechain-types";
 import { expect } from "chai";
 
-describe("factory test", () => {
+describe("Vault test", () => {
   const { deployments, getNamedAccounts, getChainId } = hre;
   const { deploy, get, execute, read } = deployments;
   let deployer: HardhatEthersSigner;
@@ -56,17 +64,14 @@ describe("factory test", () => {
       await usdt.connect(alice).approve(await vault.getAddress(), amount);
       await vault
         .connect(alice)
-        .openOffer(idOffer, await usdt.getAddress(), amount, minAmount);
+        .openOffer(idOffer, await usdt.getAddress(), amount);
     });
 
     it("should revert when douplicate id", async () => {
       await expect(
-        vault
-          .connect(alice)
-          .openOffer(idOffer, await usdt.getAddress(), amount, minAmount)
+        vault.connect(alice).openOffer(idOffer, await usdt.getAddress(), amount)
       ).to.be.revertedWith("AP01: offer already exists");
     });
-
     describe("upgrade Offer", () => {
       let idOffer = hexlify(ethers.randomBytes(32));
       let initialAmount = parseUnits("100", 6);
@@ -79,22 +84,17 @@ describe("factory test", () => {
           .approve(await vault.getAddress(), initialAmount);
         await vault
           .connect(alice)
-          .openOffer(
-            idOffer,
-            await usdt.getAddress(),
-            initialAmount,
-            minAmount
-          );
+          .openOffer(idOffer, await usdt.getAddress(), initialAmount);
       });
 
       it("should allow upgrading offer with extra payout", async () => {
         await usdt
           .connect(alice)
           .approve(await vault.getAddress(), extraAmount);
-        await vault.connect(alice).upgradeOffer(idOffer, extraAmount);
-
+        await expect(
+          vault.connect(alice).upgradeOffer(idOffer, extraAmount)
+        ).to.emit(vault, "OfferUpgraded");
         const offer = await vault.offers(idOffer);
-        expect(offer.totalPayout).to.equal(initialAmount + extraAmount);
         expect(offer.balance).to.equal(initialAmount + extraAmount);
       });
 
@@ -106,65 +106,74 @@ describe("factory test", () => {
       });
     });
 
-    describe("accept Offer", () => {
-      it("should allow participant to accept offer", async () => {
-        await vault.connect(bob).acceptOffer(idOffer);
-        const participant = await vault.particapants(idOffer, 0);
-        expect(participant.addr).to.equal(bob.address);
-        expect(participant.reward).to.equal(0);
-      });
+    describe("claim reward", () => {
+      let idOffer = hexlify(ethers.randomBytes(32));
 
-      it("should revert if offer is not open", async () => {
-        const invalidOfferId = hexlify(ethers.randomBytes(32));
-        await expect(
-          vault.connect(bob).acceptOffer(invalidOfferId)
-        ).to.be.revertedWith("AP03: offer is not open");
-      });
-
-      it("should revert if offer is already accepted", async () => {
-        await vault.connect(bob).acceptOffer(idOffer);
-        await expect(
-          vault.connect(bob).acceptOffer(idOffer)
-        ).to.be.revertedWith("AP04: already accepted");
-      });
-
-      it("should revert if offer is full", async () => {
-        await vault.connect(bob).acceptOffer(idOffer);
-
-        await expect(
-          vault.connect(charlie).acceptOffer(idOffer)
-        ).to.be.revertedWith("AP05: full particapants");
-      });
-    });
-
-    describe("update Reward", () => {
-      beforeEach(async () => {
-        await vault.connect(bob).acceptOffer(idOffer);
-      });
-
-      it("should allow owner to update reward", async () => {
+      beforeEach(async () => {});
+      it("should allow claim reward ERC20", async () => {
+        let amount = parseUnits("100", 6);
+        await usdt.connect(alice).approve(await vault.getAddress(), amount);
         await vault
-          .connect(deployer)
-          .AddRewardParticapants([idOffer], [0], [parseUnits("10", 6)]);
-        const participant = await vault.particapants(idOffer, 0);
-        expect(participant.reward).to.equal(parseUnits("10", 6));
+          .connect(alice)
+          .openOffer(idOffer, await usdt.getAddress(), amount);
+
+        const verifier = new Wallet(process.env.VERIFIER_KEY!);
+        const receiver = bob.address;
+        const reward = parseUnits("10", 6);
+        const data = AbiCoder.defaultAbiCoder().encode(
+          ["bytes32", "address", "uint256"],
+          [idOffer, receiver, reward]
+        );
+        const dataHash = ethers.keccak256(data);
+        const signature = await verifier.signMessage(getBytes(dataHash));
+        await expect(vault.connect(bob).claimReward(data, signature)).to.emit(
+          vault,
+          "RewardClaimed"
+        );
+        const offer = await vault.offers(idOffer);
+        expect(offer.balance).to.equal(amount - reward);
       });
 
-      it("should revert if offer is not open", async () => {
-        const invalidOfferId = hexlify(ethers.randomBytes(32));
+      it("should allow claim reward Native token", async () => {
+        let amount = parseUnits("100", 18);
+        await vault
+          .connect(alice)
+          .openOffer(idOffer, ZeroAddress, amount, { value: amount });
+        const verifier = new Wallet(process.env.VERIFIER_KEY!);
+        const receiver = bob.address;
+        const reward = parseUnits("10", 6);
+        const data = AbiCoder.defaultAbiCoder().encode(
+          ["bytes32", "address", "uint256"],
+          [idOffer, receiver, reward]
+        );
+        const dataHash = ethers.keccak256(data);
+        const signature = await verifier.signMessage(getBytes(dataHash));
         await expect(
-          vault
-            .connect(deployer)
-            .AddRewardParticapants([invalidOfferId], [0], [parseUnits("10", 6)])
-        ).to.be.revertedWith("AP07: offer is not open");
+          vault.connect(bob).claimReward(data, signature)
+        ).to.be.changeEtherBalance(bob, reward);
+        const offer = await vault.offers(idOffer);
+        expect(offer.balance).to.equal(amount - reward);
       });
 
-      it("should revert if participant is not accepted", async () => {
-        await expect(
-          vault
-            .connect(deployer)
-            .AddRewardParticapants([idOffer], [2], [parseUnits("10", 6)])
-        ).to.be.revertedWith("AP08: not accepted status");
+      it("should revert if claim reward with invalid signature", async () => {
+        let amount = parseUnits("100", 6);
+        await usdt.connect(alice).approve(await vault.getAddress(), amount);
+        await vault
+          .connect(alice)
+          .openOffer(idOffer, await usdt.getAddress(), amount);
+
+        const verifier = new Wallet(process.env.VERIFIER_KEY!);
+        const receiver = bob.address;
+        const reward = parseUnits("10", 6);
+        const data = AbiCoder.defaultAbiCoder().encode(
+          ["bytes32", "address", "uint256"],
+          [idOffer, receiver, reward]
+        );
+        const dataHash = ethers.keccak256(data);
+        const signature = await verifier.signMessage(getBytes(dataHash));
+
+        await expect(vault.connect(bob).claimReward(data, signature + "00")).to
+          .be.reverted;
       });
     });
   });
