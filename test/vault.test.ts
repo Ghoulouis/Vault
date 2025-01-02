@@ -71,6 +71,8 @@ describe("Vault test", () => {
       await expect(
         vault.connect(alice).openOffer(idOffer, await usdt.getAddress(), amount)
       ).to.be.revertedWith("AP01: offer already exists");
+
+      ZeroAddress;
     });
     describe("upgrade Offer", () => {
       let idOffer = hexlify(ethers.randomBytes(32));
@@ -96,6 +98,7 @@ describe("Vault test", () => {
         ).to.emit(vault, "OfferUpgraded");
         const offer = await vault.offers(idOffer);
         expect(offer.balance).to.equal(initialAmount + extraAmount);
+        ZeroAddress;
       });
 
       it("should revert if upgrading a non-existent offer", async () => {
